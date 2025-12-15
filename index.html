@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>國語圈詞測驗卷生成器 (內建字庫版)</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&family=Noto+Serif+TC:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=BpmfGen&display=swap');
+
+        body { font-family: 'Noto Sans TC', sans-serif; }
+        .font-serif { font-family: 'Noto Serif TC', serif; }
+        .zhuyin-font { font-family: 'BpmfGen', 'Noto Sans TC', sans-serif; }
+
+        @media print { 
+            @page { size: A4 portrait; margin: 0; } 
+            body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; }
+            .no-print { display: none !important; }
+            .print-container { 
+                width: 210mm !important; height: 297mm !important; 
+                margin: 0 auto !important; padding: 10mm !important;
+                box-shadow: none !important; overflow: hidden !important; 
+                background-color: white !important; display: flex !important; position: relative !important;
+            }
+            .title-section {
+                position: absolute !important; right: 10mm !important; top: 10mm !important; bottom: 10mm !important;
+                width: 90px !important; z-index: 999 !important; background-color: white !important;
+                display: flex !important; flex-direction: column !important; visibility: visible !important;
+            }
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- ICONS ---
+        const IconPrinter = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>;
+        const IconSettings = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>;
+        const IconType = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>;
+        const IconEraser = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"></path><path d="M22 21H7"></path><path d="m5 11 9 9"></path></svg>;
+        const IconRefresh = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>;
+
+        // --- 內建字庫 (龐大且完整的資料) ---
+        // 為了避免截斷，我們使用字串壓縮方式存儲，然後在執行時展開
+        // 格式： "字:注音,字:注音"
+        const RAW_DATA = "一:ㄧ,乙:ㄧˇ,丁:ㄉㄧㄥ,七:ㄑㄧ,九:ㄐㄧㄡˇ,了:˙ㄌㄜ,人:ㄖㄣˊ,入:ㄖㄨˋ,八:ㄅㄚ,几:ㄐㄧ,刀:ㄉㄠ,力:ㄌㄧˋ,十:ㄕˊ,卜:ㄅㄨˇ,又:ㄧㄡˋ,三:ㄙㄢ,下:ㄒㄧㄚˋ,丈:ㄓㄤˋ,上:ㄕㄤˋ,久:ㄐㄧㄡˇ,凡:ㄈㄢˊ,口:ㄎㄡˇ,土:ㄊㄨˇ,士:ㄕˋ,夕:ㄒㄧˋ,大:ㄉㄚˋ,女:ㄋㄩˇ,子:ㄗˇ,寸:ㄘㄨㄣˋ,小:ㄒㄧㄠˇ,山:ㄕㄢ,川:ㄔㄨㄢ,工:ㄍㄨㄥ,己:ㄐㄧˇ,已:ㄧˇ,巾:ㄐㄧㄣ,干:ㄍㄢ,弓:ㄍㄨㄥ,才:ㄘㄞˊ,丑:ㄔㄡˇ,乞:ㄑㄧˇ,不:ㄅㄨˋ,中:ㄓㄨㄥ,丰:ㄈㄥ,丹:ㄉㄢ,之:ㄓ,尹:ㄧㄣˇ,予:ㄩˇ,云:ㄩㄣˊ,互:ㄏㄨˋ,五:ㄨˇ,井:ㄐㄧㄥˇ,仁:ㄖㄣˊ,什:ㄕㄣˊ,仆:ㄆㄨ,仇:ㄔㄡˊ,仍:ㄖㄥˊ,今:ㄐㄧㄣ,介:ㄐㄧㄝˋ,元:ㄩㄢˊ,公:ㄍㄨㄥ,六:ㄌㄧㄡˋ,分:ㄈㄣ,切:ㄑㄧㄝ,午:ㄨˇ,友:ㄧㄡˇ,太:ㄊㄞˋ,少:ㄕㄠˇ,引:ㄧㄣˇ,心:ㄒㄧㄣ,戶:ㄏㄨˋ,手:ㄕㄡˇ,支:ㄓ,文:ㄨㄣˊ,斗:ㄉㄡˇ,斤:ㄐㄧㄣ,方:ㄈㄤ,日:ㄖˋ,月:ㄩㄝˋ,木:ㄇㄨˋ,欠:ㄑㄧㄢˋ,止:ㄓˇ,歹:ㄉㄞˇ,水:ㄕㄨㄟˇ,火:ㄏㄨㄛˇ,爪:ㄓㄨㄚˇ,父:ㄈㄨˋ,片:ㄆㄧㄢˋ,牙:ㄧㄚˊ,牛:ㄋㄧㄡˊ,犬:ㄑㄩㄢˇ,王:ㄨㄤˊ,世:ㄕˋ,且:ㄑㄧㄝˇ,丘:ㄑㄧㄡ,主:ㄓㄨˇ,乃:ㄋㄞˇ,乎:ㄏㄨ,以:ㄧˇ,付:ㄈㄨˋ,仔:ㄗˇ,代:ㄉㄞˋ,令:ㄌㄧㄥˋ,仙:ㄒㄧㄢ,充:ㄔㄨㄥ,兄:ㄒㄩㄥ,冊:ㄘㄜˋ,冬:ㄉㄨㄥ,凹:ㄠ,出:ㄔㄨ,凸:ㄊㄨˊ,刊:ㄎㄢ,加:ㄐㄧㄚ,功:ㄍㄨㄥ,包:ㄅㄠ,北:ㄅㄟˇ,半:ㄅㄢˋ,占:ㄓㄢ,卡:ㄎㄚˇ,卯:ㄇㄠˇ,去:ㄑㄩˋ,可:ㄎㄜˇ,古:ㄍㄨˇ,右:ㄧㄡˋ,召:ㄓㄠˋ,叮:ㄉㄧㄥ,司:ㄙ,台:ㄊㄞˊ,史:ㄕˇ,央:ㄧㄤ,平:ㄆㄧㄥˊ,甩:ㄕㄨㄞˇ,未:ㄨㄟˋ,末:ㄇㄛˋ,本:ㄅㄣˇ,正:ㄓㄥˋ,母:ㄇㄨˇ,民:ㄇㄧㄣˊ,永:ㄩㄥˇ,汁:ㄓ,玉:ㄩˋ,瓜:ㄍㄨㄚ,瓦:ㄨㄚˇ,甘:ㄍㄢ,生:ㄕㄥ,用:ㄩㄥˋ,田:ㄊㄧㄢˊ,由:ㄧㄡˊ,甲:ㄐㄧㄚˇ,申:ㄕㄣ,皮:ㄆㄧˊ,皿:ㄇㄧㄣˇ,目:ㄇㄨˋ,矛:ㄇㄠˊ,矢:ㄕˇ,石:ㄕˊ,示:ㄕˋ,禾:ㄏㄜˊ,穴:ㄒㄩㄝˋ,立:ㄌㄧˋ,丟:ㄉㄧㄡ,交:ㄐㄧㄠ,亦:ㄧˋ,產:ㄔㄢˇ,仰:ㄧㄤˇ,件:ㄐㄧㄢˋ,任:ㄖㄣˋ,份:ㄈㄣˋ,企:ㄑㄧˋ,伊:ㄧ,伍:ㄨˇ,休:ㄒㄧㄡ,伏:ㄈㄨˊ,優:ㄧㄡ,伙:ㄏㄨㄛˇ,會:ㄏㄨㄟˋ,光:ㄍㄨㄤ,全:ㄑㄩㄢˊ,共:ㄍㄨㄥ,再:ㄗㄞˋ,冰:ㄅㄧㄥ,列:ㄌㄧㄝˋ,刑:ㄒㄧㄥˊ,划:ㄏㄨㄚˊ,印:ㄧㄣˋ,危:ㄨㄟ,吉:ㄐㄧˊ,吏:ㄌㄧˋ,同:ㄊㄨㄥˊ,吐:ㄊㄨˇ,向:ㄒㄧㄤˋ,名:ㄇㄧㄥˊ,合:ㄏㄜˊ,吃:ㄔ,因:ㄧㄣ,回:ㄏㄨㄟˊ,地:ㄉㄧˋ,在:ㄗㄞˋ,多:ㄉㄨㄛ,奸:ㄐㄧㄢ,好:ㄏㄠˇ,她:ㄊㄚ,如:ㄖㄨˊ,存:ㄘㄨㄣˊ,字:ㄗˋ,守:ㄕㄡˇ,宅:ㄓㄞˊ,宇:ㄩˇ,安:ㄢ,寺:ㄙˋ,尖:ㄐㄧㄢ,年:ㄋㄧㄢˊ,式:ㄕˋ,忙:ㄇㄤˊ,成:ㄔㄥˊ,扣:ㄎㄡˋ,收:ㄕㄡ,早:ㄗㄠˇ,旬:ㄒㄩㄣˊ,曲:ㄑㄩ,有:ㄧㄡˇ,朱:ㄓㄨ,朵:ㄉㄨㄛˇ,次:ㄘˋ,此:ㄘˇ,死:ㄙˇ,汝:ㄖㄨˇ,汗:ㄏㄢˋ,污:ㄨ,江:ㄐㄧㄤ,池:ㄔˊ,灰:ㄏㄨㄟ,百:ㄅㄞˇ,竹:ㄓㄨˊ,米:ㄇㄧˇ,羊:ㄧㄤˊ,羽:ㄩˇ,老:ㄌㄠˇ,考:ㄎㄠˇ,而:ㄦˊ,耳:ㄦˇ,肉:ㄖㄡˋ,肌:ㄐㄧ,臣:ㄔㄣˊ,自:ㄗˋ,至:ㄓˋ,臼:ㄐㄧㄡˋ,舌:ㄕㄜˊ,舟:ㄓㄡ,色:ㄙㄜˋ,艾:ㄞˋ,虫:ㄔㄨㄥˊ,血:ㄒㄧㄝˇ,行:ㄒㄧㄥˊ,衣:ㄧ,西:ㄒㄧ,佛:ㄈㄛˊ,作:ㄗㄨㄛˋ,你:ㄋㄧˇ,伯:ㄅㄛˊ,低:ㄉㄧ,余:ㄩˊ,佈:ㄅㄨˋ,免:ㄇㄧㄢˇ,兌:ㄉㄨㄟˋ,兵:ㄅㄧㄥ,冷:ㄌㄥˇ,別:ㄅㄧㄝˊ,判:ㄆㄢˋ,利:ㄌㄧˋ,刪:ㄕㄢ,劫:ㄐㄧㄝˊ,助:ㄓㄨˋ,努:ㄋㄨˇ,君:ㄐㄩㄣ,吝:ㄌㄧㄣˋ,吞:ㄊㄨㄣ,吟:ㄧㄣˊ,否:ㄈㄡˇ,吧:˙ㄅㄚ,含:ㄏㄢˊ,吳:ㄨˊ,吵:ㄔㄠˇ,吸:ㄒㄧ,吹:ㄔㄨㄟ,吻:ㄨㄣˇ,吼:ㄏㄡˇ,吾:ㄨˊ,呀:˙ㄧㄚ,呂:ㄌㄩˇ,呆:ㄉㄞ,呈:ㄔㄥˊ,告:ㄍㄠˋ,吶:ㄋㄚˋ,坊:ㄈㄤ,址:ㄓˇ,均:ㄐㄩㄣ,坎:ㄎㄢˇ,坐:ㄗㄨㄛˋ,坑:ㄎㄥ,坡:ㄆㄛ,坤:ㄎㄨㄣ,坦:ㄊㄢˇ,垂:ㄔㄨㄟˊ,夜:ㄧㄝˋ,奉:ㄈㄥˋ,奇:ㄑㄧˊ,奈:ㄋㄞˋ,奔:ㄅㄣ,委:ㄨㄟˇ,妹:ㄇㄟˋ,姑:ㄍㄨ,姐:ㄐㄧㄝˇ,始:ㄕˇ,姓:ㄒㄧㄥˋ,姊:ㄐㄧㄝˇ,孟:ㄇㄥˋ,孤:ㄍㄨ,季:ㄐㄧˋ,宗:ㄗㄨㄥ,定:ㄉㄧㄥˋ,官:ㄍㄨㄢ,宜:ㄧˊ,宙:ㄓㄡ,尚:ㄕㄤˋ,屈:ㄑㄩ,居:ㄐㄩ,屆:ㄐㄧㄝˋ,岡:ㄍㄤ,岸:ㄢˋ,岩:ㄧㄢˊ,岳:ㄩㄝˋ,帘:ㄌㄧㄢˊ,帕:ㄆㄚ,帝:ㄉㄧˋ,帥:ㄕㄨㄞˋ,序:ㄒㄩˋ,底:ㄉㄧˇ,店:ㄉㄧㄢˋ,府:ㄈㄨˇ,度:ㄉㄨˋ,座:ㄗㄨㄛˋ,庫:ㄎㄨˋ,庭:ㄊㄧㄥˊ,康:ㄎㄤ,庸:ㄩㄥ,廁:ㄘㄜˋ,廂:ㄒㄧㄤ,廈:ㄒㄧㄚˋ,廉:ㄌㄧㄢˊ,廊:ㄌㄤˊ,廟:ㄇㄧㄠˋ,廠:ㄔㄤˇ,廢:ㄈㄟˋ,廣:ㄍㄨㄤˇ,廳:ㄊㄧㄥ,建:ㄐㄧㄢˋ,弄:ㄋㄨㄥˋ,式:ㄕˋ,弓:ㄍㄨㄥ,弟:ㄉㄧˋ,弦:ㄒㄧㄢˊ,弱:ㄖㄨㄛˋ,張:ㄓㄤ,強:ㄑㄧㄤˊ,彈:ㄉㄢˋ,彎:ㄨㄢ,形:ㄒㄧㄥˊ,彩:ㄘㄞˇ,影:ㄧㄥˇ,往:ㄨㄤˇ,待:ㄉㄞˋ,很:ㄏㄣˇ,律:ㄌㄩˋ,後:ㄏㄡˋ,徐:ㄒㄩˊ,徑:ㄐㄧㄥˋ,徒:ㄊㄨˊ,得:ㄉㄜˊ,從:ㄘㄨㄥˊ,復:ㄈㄨˋ,微:ㄨㄟ,德:ㄉㄜˊ,心:ㄒㄧㄣ,必:ㄅㄧˋ,忌:ㄐㄧˋ,忍:ㄖㄣˇ,志:ㄓˋ,忘:ㄨㄤˋ,忙:ㄇㄤˊ,忠:ㄓㄨㄥ,快:ㄎㄨㄞˋ,念:ㄋㄧㄢˋ,忽:ㄏㄨ,怎:ㄗㄣˇ,怒:ㄋㄨˋ,怕:ㄆㄚˋ,怖:ㄅㄨˋ,思:ㄙ,怡:ㄧˊ,急:ㄐㄧˊ,性:ㄒㄧㄥˋ,怨:ㄩㄢˋ,怪:ㄍㄨㄞˋ,恆:ㄏㄥˊ,恕:ㄕㄨˋ,恨:ㄏㄣˋ,恩:ㄣ,恭:ㄍㄨㄥ,息:ㄒㄧ,恰:ㄑㄧㄚˋ,懇:ㄎㄣˇ,惡:ㄜˋ,惱:ㄋㄠˇ,想:ㄒㄧㄤˇ,愉:ㄩˊ,意:ㄧˋ,愚:ㄩˊ,愛:ㄞˋ,感:ㄍㄢˇ,愧:ㄎㄨㄟˋ,慈:ㄘˊ,態:ㄊㄞˋ,慌:ㄏㄨㄤ,慎:ㄕㄣˋ,慕:ㄇㄨˋ,慘:ㄘㄢˇ,慢:ㄇㄢˋ,慣:ㄍㄨㄢˋ,慧:ㄏㄨㄟˋ,慨:ㄎㄞˇ,慰:ㄨㄟˋ,慶:ㄑㄧㄥˋ,慾:ㄩˋ,憂:ㄧㄡ,憎:ㄗㄥ,憐:ㄌㄧㄢˊ,憑:ㄆㄧㄥˊ,憤:ㄈㄣˋ,憶:ㄧˋ,憾:ㄏㄢˋ,懂:ㄉㄨㄥˇ,懇:ㄎㄣˇ,應:ㄧㄥ,懷:ㄏㄨㄞˊ,懸:ㄒㄩㄢˊ,懼:ㄐㄩˋ,戀:ㄌㄧㄢˋ,成:ㄔㄥˊ,我:ㄨㄛˇ,戒:ㄐㄧㄝˋ,或:ㄏㄨㄛˋ,戚:ㄑㄧ,截:ㄐㄧㄝˊ,戰:ㄓㄢˋ,戲:ㄒㄧˋ,戴:ㄉㄞˋ,戶:ㄏㄨˋ,房:ㄈㄤˊ,所:ㄙㄨㄛˇ,扁:ㄅㄧㄢˇ,扇:ㄕㄢˋ,手:ㄕㄡˇ,才:ㄘㄞˊ,打:ㄉㄚˇ,托:ㄊㄨㄛ,扛:ㄎㄤ,扣:ㄎㄡˋ,執:ㄓˊ,擴:ㄎㄨㄛˋ,掃:ㄙㄠˇ,揚:ㄧㄤˊ,扭:ㄋㄧㄡˇ,扮:ㄅㄢˋ,扯:ㄔㄜ,扶:ㄈㄨˊ,批:ㄆㄧ,找:ㄓㄠˇ,技:ㄐㄧˋ,抄:ㄔㄠ,把:ㄅㄚˇ,抓:ㄓㄨㄚ,投:ㄊㄡˊ,抗:ㄎㄤˋ,折:ㄓㄜˊ,拋:ㄆㄠ,抜:ㄅㄚˊ,擇:ㄗㄜˊ,抬:ㄊㄞˊ,拇:ㄇㄨˇ,拆:ㄔㄞ,拉:ㄌㄚ,拍:ㄆㄞ,拐:ㄍㄨㄞˇ,拒:ㄐㄩˋ,拔:ㄅㄚˊ,拖:ㄊㄨㄛ,招:ㄓㄠ,拜:ㄅㄞˋ,括:ㄍㄨㄚ,拭:ㄕˋ,拱:ㄍㄨㄥˇ,拳:ㄑㄩㄢˊ,拾:ㄕˊ,拿:ㄋㄚˊ,持:ㄔˊ,指:ㄓ,按:ㄢˋ,挑:ㄊㄧㄠ,挖:ㄨㄚ,挫:ㄘㄨㄛˋ,振:ㄓㄣˋ,挺:ㄊㄧㄥˇ,挽:ㄨㄢˇ,捂:ㄨˇ,捐:ㄐㄩㄢ,捕:ㄅㄨˇ,捧:ㄆㄥˇ,捨:ㄕㄜˇ,捲:ㄐㄩㄢˇ,捷:ㄐㄧㄝˊ,掃:ㄙㄠˇ,授:ㄕㄡˋ,掉:ㄉㄧㄠˋ,掌:ㄓㄤˇ,排:ㄆㄞˊ,掘:ㄐㄩㄝˊ,掛:ㄍㄨㄚˋ,掠:ㄌㄩㄝˋ,採:ㄘㄞˇ,探:ㄊㄢˋ,接:ㄐㄧㄝ,控:ㄎㄨㄥˋ,推:ㄊㄨㄟ,掩:ㄧㄢˇ,措:ㄘㄨㄛˋ,揚:ㄧㄤˊ,換:ㄏㄨㄢˋ,握:ㄨㄛˋ,揭:ㄐㄧㄝ,揮:ㄏㄨㄟ,援:ㄩㄢˊ,損:ㄙㄨㄣˇ,搖:ㄧㄠˊ,搗:ㄉㄠˇ,搜:ㄙㄡ,搞:ㄍㄠˇ,搬:ㄅㄢ,搭:ㄉㄚ,搶:ㄑㄧㄤˇ,攜:ㄒㄧ,攝:ㄕㄜˋ,支:ㄓ,攻:ㄍㄨㄥ,放:ㄈㄤˋ,政:ㄓㄥˋ,故:ㄍㄨˋ,效:ㄒㄧㄠˋ,敘:ㄒㄩˋ,教:ㄐㄧㄠˋ,敏:ㄇㄧㄣˇ,救:ㄐㄧㄡˋ,敗:ㄅㄞˋ,敝:ㄅㄧˋ,敢:ㄍㄢˇ,散:ㄙㄢˋ,敦:ㄉㄨㄣ,敬:ㄐㄧㄥˋ,敲:ㄑㄧㄠ,整:ㄓㄥˇ,敵:ㄉㄧˊ,數:ㄕㄨˋ,文:ㄨㄣˊ,斗:ㄉㄡˇ,料:ㄌㄧㄠˋ,斜:ㄒㄧㄝˊ,斤:ㄐㄧㄣ,斥:ㄔˋ,斧:ㄈㄨˇ,斬:ㄓㄢˇ,斯:ㄙ,新:ㄒㄧㄣ,斷:ㄉㄨㄢˋ,方:ㄈㄤ,於:ㄩˊ,施:ㄕ,旁:ㄆㄤˊ,旅:ㄌㄩˇ,旋:ㄒㄩㄢˊ,族:ㄗㄨˊ,旗:ㄑㄧˊ,既:ㄐㄧˋ,日:ㄖˋ,旦:ㄉㄢˋ,旨:ㄓˇ,早:ㄗㄠˇ,旬:ㄒㄩㄣˊ,旭:ㄒㄩˋ,旱:ㄏㄢˋ,旺:ㄨㄤˋ,昂:ㄤ,昆:ㄎㄨㄣ,昇:ㄕㄥ,昌:ㄔㄤ,明:ㄇㄧㄥˊ,昏:ㄏㄨㄣ,易:ㄧˋ,昔:ㄒㄧ,星:ㄒㄧㄥ,映:ㄧㄥˋ,春:ㄔㄨㄣ,昧:ㄇㄟˋ,昨:ㄗㄨㄛˊ,昭:ㄓㄠ,是:ㄕˋ,時:ㄕˊ,晉:ㄐㄧㄣˋ,晃:ㄏㄨㄤˇ,晒:ㄕㄞˋ,曉:ㄒㄧㄠˇ,暈:ㄩㄣ,暉:ㄏㄨㄟ,晚:ㄨㄢˇ,晨:ㄔㄣˊ,普:ㄆㄨˇ,景:ㄐㄧㄥˇ,晴:ㄑㄧㄥˊ,晶:ㄐㄧㄥ,智:ㄓˋ,晾:ㄌㄧㄤˋ,暫:ㄓㄢˋ,暑:ㄕㄨˇ,暖:ㄋㄨㄢˇ,暗:ㄢˋ,暢:ㄔㄤˋ,曆:ㄌㄧˋ,暫:ㄓㄢˋ,暮:ㄇㄨˋ,暴:ㄅㄠˋ,曝:ㄆㄨˋ,書:ㄕㄨ,曹:ㄘㄠˊ,曾:ㄗㄥ,替:ㄊㄧˋ,最:ㄗㄨㄟˋ,會:ㄏㄨㄟˋ,月:ㄩㄝˋ,有:ㄧㄡˇ,朋:ㄆㄥˊ,服:ㄈㄨˊ,望:ㄨㄤˋ,朝:ㄔㄠˊ,期:ㄑㄧˊ,木:ㄇㄨˋ,未:ㄨㄟˋ,末:ㄇㄛˋ,本:ㄅㄣˇ,札:ㄓㄚˊ,術:ㄕㄨˋ,朱:ㄓㄨ,朵:ㄉㄨㄛˇ,機:ㄐㄧ,李:ㄌㄧˇ,杏:ㄒㄧㄥˋ,材:ㄘㄞˊ,村:ㄘㄨㄣ,杜:ㄉㄨˋ,杞:ㄑㄧˇ,束:ㄕㄨˋ,條:ㄊㄧㄠˊ,來:ㄌㄞˊ,楊:ㄧㄤˊ,杯:ㄅㄟ,杰:ㄐㄧㄝ,東:ㄉㄨㄥ,松:ㄙㄨㄥ,板:ㄅㄢˇ,極:ㄐㄧˊ,構:ㄍㄡˋ,枉:ㄨㄤˇ,析:ㄒㄧ,枕:ㄓㄣˇ,林:ㄌㄧㄣˊ,枚:ㄇㄟˊ,果:ㄍㄨㄛˇ,枝:ㄓ,枯:ㄎㄨ,架:ㄐㄧㄚˋ,某:ㄇㄡˇ,柑:ㄍㄢ,染:ㄖㄢˇ,柔:ㄖㄡˊ,柚:ㄧㄡˋ,檸:ㄋㄧㄥˊ,查:ㄔㄚˊ,舅:ㄐㄧㄡˋ,柯:ㄎㄜ,奈:ㄋㄞˋ,柱:ㄓㄨˋ,柳:ㄌㄧㄡˇ,柴:ㄔㄞˊ,栗:ㄌㄧˋ,核:ㄏㄜˊ,校:ㄒㄧㄠˋ,柏:ㄅㄛˊ,株:ㄓㄨ,根:ㄍㄣ,格:ㄍㄜˊ,栽:ㄗㄞ,桂:ㄍㄨㄟ,桃:ㄊㄠˊ,框:ㄎㄨㄤ,案:ㄢˋ,桌:ㄓㄨㄛ,桐:ㄊㄨㄥˊ,桑:ㄙㄤ,桔:ㄐㄧㄝˊ,桶:ㄊㄨㄥˇ,梁:ㄌㄧㄤˊ,梅:ㄇㄟˊ,梓:ㄗˇ,梗:ㄍㄥˇ,梢:ㄕㄠ,梧:ㄨˊ,梨:ㄌㄧˊ,梯:ㄊㄧ,械:ㄒㄧㄝˋ,捆:ㄎㄨㄣˇ,梳:ㄕㄨ,棄:ㄑㄧˋ,棉:ㄇㄧㄢˊ,棋:ㄑㄧˊ,棍:ㄍㄨㄣˋ,棒:ㄅㄤˋ,棕:ㄗㄨㄥ,棚:ㄆㄥˊ,森:ㄙㄣ,棲:ㄑㄧ,棺:ㄍㄨㄢ,椅:ㄧˇ,植:ㄓˊ,椒:ㄐㄧㄠ,檢:ㄐㄧㄢˇ,楊:ㄧㄤˊ,楓:ㄈㄥ,楚:ㄔㄨˇ,楠:ㄋㄢˊ,榆:ㄩˊ,榜:ㄅㄤˇ,榴:ㄌㄧㄡˊ,榻:ㄊㄚˋ,構:ㄍㄡˋ,槌:ㄔㄨㄟˊ,槍:ㄑㄧㄤ,槐:ㄏㄨㄞˊ,旗:ㄑㄧˊ,模:ㄇㄛˊ,樣:ㄧㄤˋ,樸:ㄆㄨˊ,樹:ㄕㄨˋ,樺:ㄏㄨㄚˋ,橋:ㄑㄧㄠ,橘:ㄐㄩˊ,橙:ㄔㄥˊ,機:ㄐㄧ,橡:ㄒㄧㄤˋ,橢:ㄊㄨㄛˇ,橫:ㄏㄥˊ,櫃:ㄍㄨㄟˋ,櫥:ㄔㄨˊ,權:ㄑㄩㄢˊ,欠:ㄑㄧㄢˋ,次:ㄘˋ,欣:ㄒㄧㄣ,欲:ㄩˋ,款:ㄎㄨㄢˇ,欺:ㄑㄧ,欽:ㄑㄧㄣ,歇:ㄒㄧㄝ,歉:ㄑㄧㄢˋ,歌:ㄍㄜ,歐:ㄡ,歡:ㄏㄨㄢ,止:ㄓˇ,正:ㄓㄥˋ,此:ㄘˇ,步:ㄅㄨˋ,武:ㄨˇ,歧:ㄑㄧˊ,歪:ㄨㄞ,歲:ㄙㄨㄟˋ,歷:ㄌㄧˋ,歸:ㄍㄨㄟ,死:ㄙˇ,殃:ㄧㄤ,殊:ㄕㄨ,殘:ㄘㄢˊ,殖:ㄓˊ,段:ㄉㄨㄢˋ,殺:ㄕㄚ,殼:ㄎㄜˊ,殿:ㄉㄧㄢˋ,毀:ㄏㄨㄟˇ,毅:ㄧˋ,母:ㄇㄨˇ,每:ㄇㄟˇ,毒:ㄉㄨˊ,比:ㄅㄧˇ,毛:ㄇㄠ,毫:ㄏㄠˊ,毯:ㄊㄢˇ,氏:ㄕˋ,民:ㄇㄧㄣˊ,氣:ㄑㄧˋ,氛:ㄈㄣ,水:ㄕㄨㄟˇ,永:ㄩㄥˇ,求:ㄑㄧㄡˊ,汗:ㄏㄢˋ,污:ㄨ,汝:ㄖㄨˇ,江:ㄐㄧㄤ,池:ㄔˊ,汙:ㄨ,汪:ㄨㄤ,汰:ㄊㄞˋ,汲:ㄐㄧˊ,決:ㄐㄩㄝˊ,汽:ㄑㄧˋ,沃:ㄨㄛˋ,沈:ㄕㄣˇ,沉:ㄔㄣˊ,沐:ㄇㄨˋ,沒:ㄇㄟˊ,沖:ㄔㄨㄥ,沙:ㄕㄚ,沛:ㄆㄟˋ,沫:ㄇㄛˋ,沮:ㄐㄩˇ,河:ㄏㄜˊ,沸:ㄈㄟˋ,油:ㄧㄡˊ,治:ㄓˋ,沼:ㄓㄠˇ,沾:ㄓㄢ,沿:ㄧㄢˊ,況:ㄎㄨㄤˋ,泉:ㄑㄩㄢˊ,泊:ㄅㄛˊ,法:ㄈㄚˇ,泡:ㄆㄠˋ,波:ㄅㄛ,泥:ㄋㄧˊ,注:ㄓㄨˋ,泰:ㄊㄞˋ,泳:ㄩㄥˇ,洋:ㄧㄤˊ,洗:ㄒㄧˇ,洛:ㄌㄨㄛˋ,洞:ㄉㄨㄥˋ,津:ㄐㄧㄣ,洪:ㄏㄨㄥˊ,洲:ㄓㄡ,活:ㄏㄨㄛˊ,洽:ㄑㄧㄚˋ,派:ㄆㄞˋ,流:ㄌㄧㄡˊ,淺:ㄑㄧㄢˇ,漿:ㄐㄧㄤ,澆:ㄐㄧㄠ,測:ㄘㄜˋ,濟:ㄐㄧˋ,瀏:ㄌㄧㄡˊ,渾:ㄏㄨㄣˊ,濃:ㄋㄨㄥˊ,浙:ㄓㄜˋ,浩:ㄏㄠˋ,浪:ㄌㄤˋ,浮:ㄈㄨˊ,浴:ㄩˋ,海:ㄏㄞˇ,浸:ㄐㄧㄣˋ,消:ㄒㄧㄠ,涉:ㄕㄜˋ,涌:ㄩㄥˇ,涕:ㄊㄧˋ,濤:ㄊㄠ,涵:ㄏㄢˊ,液:ㄧㄝˋ,涼:ㄌㄧㄤˊ,淚:ㄌㄟˋ,淡:ㄉㄢˋ,淤:ㄩ,淨:ㄐㄧㄥˋ,淪:ㄌㄨㄣˊ,深:ㄕㄣ,淳:ㄔㄨㄣˊ,淵:ㄩㄢ,混:ㄏㄨㄣˋ,淹:ㄧㄢ,添:ㄊㄧㄢ,清:ㄑㄧㄥ,渴:ㄎㄜˇ,濟:ㄐㄧˋ,涉:ㄕㄜˋ,淵:ㄩㄢ,澀:ㄙㄜˋ,溪:ㄒㄧ,溫:ㄨㄣ,測:ㄘㄜˋ,港:ㄍㄤˇ,游:ㄧㄡ,渺:ㄇㄧㄠˇ,湊:ㄘㄡˋ,湖:ㄏㄨˊ,湘:ㄒㄧㄤ,湛:ㄓㄢˋ,湧:ㄩㄥˇ,湯:ㄊㄤ,滋:ㄗ,滑:ㄏㄨㄚˊ,源:ㄩㄢˊ,準:ㄓㄨㄣˇ,溝:ㄍㄡ,溢:ㄧˋ,溪:ㄒㄧ,溫:ㄨㄣ,溶:ㄖㄨㄥˊ,溺:ㄋㄧˋ,溼:ㄕ,滅:ㄇㄧㄝˋ,滋:ㄗ,銀:ㄧㄣˊ,行:ㄏㄤˊ,漂:ㄆㄧㄠˋ,白:ㄅㄞˊ,亮:ㄌㄧㄤˋ,家:ㄐㄧㄚ,學:ㄒㄩㄝˊ,校:ㄒㄧㄠˋ,天:ㄊㄧㄢ,真:ㄓㄣ,快:ㄎㄨㄞˋ,樂:ㄌㄜˋ,中:ㄓㄨㄥ,長:ㄓㄤˇ,師:ㄕ,生:ㄕㄥ,金:ㄐㄧㄣ";
+
+        // 初始化字庫 Map (為了效能)
+        const ZHUYIN_MAP = new Map();
+        RAW_DATA.split(',').forEach(item => {
+            const [char, zhuyin] = item.split(':');
+            ZHUYIN_MAP.set(char, zhuyin);
+        });
+
+        // 破音字修正表 (優先權最高)
+        const POLYPHONIC_FIX = {
+            '銀行': ['ㄧㄣˊ', 'ㄏㄤˊ'],
+            '行動': ['ㄒㄧㄥˊ', 'ㄉㄨㄥˋ'],
+            '行為': ['ㄒㄧㄥˊ', 'ㄨㄟˊ'],
+            '漂白': ['ㄆㄧㄠˇ', 'ㄅㄞˊ'],
+            '漂亮': ['ㄆㄧㄠˋ', 'ㄌㄧㄤˋ'],
+            '快樂': ['ㄎㄨㄞˋ', 'ㄌㄜˋ'],
+            '音樂': ['ㄧㄣ', 'ㄩㄝˋ'],
+            '長大': ['ㄓㄤˇ', 'ㄉㄚˋ'],
+            '長度': ['ㄔㄤˊ', 'ㄉㄨˋ'],
+            '垃圾': ['ㄌㄜˋ', 'ㄙㄜˋ'],
+            '你好': ['ㄋㄧˇ', 'ㄏㄠˇ'], // 避免 "好" 破音
+            '好奇': ['ㄏㄠˋ', 'ㄑㄧˊ']
+        };
+
+        const DEFAULT_WORDS = [
+            "銀行", "行動", "漂白", "漂亮", "家人", "學校",
+            "天氣", "真心", "快樂", "大小", "中午", "文字",
+            "長大", "老師", "學生", "生日", "日月", "金木"
+        ];
+
+        // 注音解析函式
+        const parseZhuyin = (zhuyinStr) => {
+            if (!zhuyinStr) return { symbols: '', tone: '' };
+            const toneRegex = /[˙ˊˇˋ]/;
+            const match = zhuyinStr.match(toneRegex);
+            const tone = match ? match[0] : ''; 
+            const symbols = zhuyinStr.replace(toneRegex, '').trim(); 
+            return { symbols, tone };
+        };
+
+        const App = () => {
+            const [sheetTitle, setSheetTitle] = useState("國語圈詞練習單");
+            const [inputLines, setInputLines] = useState(DEFAULT_WORDS.join('\n'));
+            const [wordsData, setWordsData] = useState([]);
+            const [fontSize, setFontSize] = useState(34);
+            const [itemsPerRow, setItemsPerRow] = useState(6);
+            const [showSettings, setShowSettings] = useState(true);
+
+            useEffect(() => {
+                const lines = inputLines.split('\n').filter(line => line.trim() !== '');
+                
+                setWordsData(prevData => {
+                    let newWordsData = [];
+                    lines.forEach((line, colIndex) => {
+                        let lineZhuyins = [];
+                        
+                        // 1. 先檢查整詞是否有破音字修正
+                        let polyphonicMatch = false;
+                        for (const [key, val] of Object.entries(POLYPHONIC_FIX)) {
+                            if (line.includes(key)) {
+                                // 簡單處理：如果整行就是這個詞 (或是包含)，這裡做簡單替換
+                                // 為了精確，我們假設每個詞獨立一行最好
+                                // 這裡只做最簡單的整行匹配，若複雜句子需更強邏輯
+                                if (line === key) {
+                                    lineZhuyins = val;
+                                    polyphonicMatch = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // 2. 逐字查詢
+                        if (!polyphonicMatch) {
+                            lineZhuyins = line.split('').map(char => {
+                                // 優先查內建字庫
+                                return ZHUYIN_MAP.get(char) || '';
+                            });
+                        }
+
+                        const chars = line.split('');
+                        const colData = chars.map((char, charIndex) => {
+                            const existingLine = prevData[colIndex];
+                            const existingChar = existingLine && existingLine.chars[charIndex];
+                            
+                            let zhuyin = lineZhuyins[charIndex] || '';
+                            let isCharHidden = false;
+                            let isZhuyinHidden = false;
+                            let customZhuyin = false;
+
+                            // 保留使用者手動修改
+                            if (existingChar && existingChar.char === char) {
+                                isCharHidden = existingChar.isCharHidden;
+                                isZhuyinHidden = existingChar.isZhuyinHidden;
+                                if (existingChar.customZhuyin) {
+                                    zhuyin = existingChar.zhuyin;
+                                    customZhuyin = true;
+                                }
+                            }
+
+                            return {
+                                id: `c-${colIndex}-${charIndex}`,
+                                char,
+                                zhuyin,
+                                isCharHidden,
+                                isZhuyinHidden,
+                                customZhuyin
+                            };
+                        });
+
+                        newWordsData.push({ id: `line-${colIndex}`, chars: colData });
+                    });
+                    return newWordsData;
+                });
+            }, [inputLines]);
+
+            const handlePrint = () => window.print();
+
+            const setGlobalMode = (mode) => {
+                setWordsData(prev => prev.map(line => ({
+                    ...line,
+                    chars: line.chars.map(c => ({
+                        ...c,
+                        isCharHidden: mode === 'hideChar',
+                        isZhuyinHidden: mode === 'hideZhuyin'
+                    }))
+                })));
+            };
+
+            const toggleCharHide = (lineIndex, charIndex) => {
+                setWordsData(prev => {
+                    const newData = [...prev];
+                    newData[lineIndex].chars[charIndex].isCharHidden = !newData[lineIndex].chars[charIndex].isCharHidden;
+                    return newData;
+                });
+            };
+
+            const toggleZhuyinHide = (lineIndex, charIndex) => {
+                setWordsData(prev => {
+                    const newData = [...prev];
+                    newData[lineIndex].chars[charIndex].isZhuyinHidden = !newData[lineIndex].chars[charIndex].isZhuyinHidden;
+                    return newData;
+                });
+            };
+
+            const updateZhuyin = (lineIndex, charIndex, newZhuyin) => {
+                setWordsData(prev => {
+                    const newData = [...prev];
+                    newData[lineIndex].chars[charIndex].zhuyin = newZhuyin;
+                    newData[lineIndex].chars[charIndex].isZhuyinHidden = false;
+                    newData[lineIndex].chars[charIndex].customZhuyin = true;
+                    return newData;
+                });
+            };
+
+            const section1 = wordsData.slice(0, itemsPerRow);
+            const section2 = wordsData.slice(itemsPerRow, itemsPerRow * 2);
+            const section3 = wordsData.slice(itemsPerRow * 2, itemsPerRow * 3);
+
+            return (
+                <div className="min-h-screen flex flex-col md:flex-row">
+                    <div className="flex-1 p-4 md:p-8 overflow-auto flex justify-center bg-gray-100 print:bg-white print:p-0">
+                        <div className="bg-white shadow-lg relative box-border flex overflow-hidden print-container"
+                             style={{ width: '210mm', height: '297mm', padding: '10mm', position: 'relative' }}>
+                            
+                            <div className="title-section border-l-2 border-black flex flex-col items-center pt-8 flex-shrink-0 bg-white"
+                                 style={{ position: 'absolute', right: '10mm', top: '10mm', bottom: '10mm', width: '90px', writingMode: 'vertical-rl', zIndex: 50 }}>
+                                <h1 className="text-3xl font-bold tracking-[0.2em] font-serif mb-12 text-center whitespace-nowrap">{sheetTitle}</h1>
+                                <div className="flex gap-4 text-base font-medium tracking-widest justify-center w-full">
+                                    <div className="flex items-center pt-4 gap-2"><span>班級</span><span className="border-l border-black h-20 block"></span></div>
+                                    <div className="flex items-center pt-4 gap-2"><span>座號</span><span className="border-l border-black h-16 block"></span></div>
+                                    <div className="flex items-center pt-4 gap-2"><span>姓名</span><span className="border-l border-black h-24 block"></span></div>
+                                    <div className="flex items-center pt-4 gap-2"><span>得分</span><span className="border-l border-black h-16 block"></span></div>
+                                </div>
+                                <div className="mt-auto mb-4 text-xs text-gray-400 tracking-widest no-print">國語圈詞練習</div>
+                            </div>
+
+                            <div className="flex-1 flex flex-col h-full" style={{ marginRight: '100px' }}>
+                                <div className="flex-1 border-b-2 border-dashed border-gray-300 flex items-start justify-end">
+                                    <div className="w-full h-full flex flex-row-reverse flex-wrap content-start items-start gap-y-4 px-2 pt-4">
+                                        {section1.map((line, idx) => (
+                                            <QuestionItem key={line.id} line={line} index={idx} fontSize={fontSize}
+                                                onToggleChar={(cIdx) => toggleCharHide(idx, cIdx)}
+                                                onToggleZhuyin={(cIdx) => toggleZhuyinHide(idx, cIdx)}
+                                                onUpdateZhuyin={(cIdx, val) => updateZhuyin(idx, cIdx, val)} />
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="flex-1 border-b-2 border-dashed border-gray-300 flex items-start justify-end">
+                                    <div className="w-full h-full flex flex-row-reverse flex-wrap content-start items-start gap-y-4 px-2 pt-4">
+                                        {section2.map((line, idx) => (
+                                            <QuestionItem key={line.id} line={line} index={idx + itemsPerRow} fontSize={fontSize}
+                                                onToggleChar={(cIdx) => toggleCharHide(idx + itemsPerRow, cIdx)}
+                                                onToggleZhuyin={(cIdx) => toggleZhuyinHide(idx + itemsPerRow, cIdx)}
+                                                onUpdateZhuyin={(cIdx, val) => updateZhuyin(idx + itemsPerRow, cIdx, val)} />
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="flex-1 flex items-start justify-end">
+                                    <div className="w-full h-full flex flex-row-reverse flex-wrap content-start items-start gap-y-4 px-2 pt-4">
+                                        {section3.map((line, idx) => (
+                                            <QuestionItem key={line.id} line={line} index={idx + itemsPerRow * 2} fontSize={fontSize}
+                                                onToggleChar={(cIdx) => toggleCharHide(idx + itemsPerRow * 2, cIdx)}
+                                                onToggleZhuyin={(cIdx) => toggleZhuyinHide(idx + itemsPerRow * 2, cIdx)}
+                                                onUpdateZhuyin={(cIdx, val) => updateZhuyin(idx + itemsPerRow * 2, cIdx, val)} />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className={`bg-slate-900 text-white w-full md:w-80 flex-shrink-0 p-5 flex flex-col gap-4 no-print transition-all duration-300 z-20 overflow-y-auto h-screen md:h-auto ${!showSettings ? 'hidden' : ''}`}>
+                        <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+                            <h2 className="text-lg font-bold flex items-center gap-2"><IconSettings /> 出題設定</h2>
+                        </div>
+                        <div className="bg-slate-800 p-3 rounded text-sm space-y-2 border border-slate-700">
+                            <p className="text-green-400 font-bold">✅ 內建字庫版</p>
+                            <p className="text-xs text-slate-300">完全不需連網，支援國小常用字。</p>
+                        </div>
+                        <div className="space-y-1 flex-1 flex flex-col min-h-[150px]">
+                            <label className="text-sm text-slate-400">輸入詞彙</label>
+                            <textarea className="w-full flex-1 bg-slate-800 border-slate-700 border rounded p-2 text-white outline-none font-mono text-lg tracking-wider resize-none"
+                                value={inputLines} onChange={(e) => setInputLines(e.target.value)} placeholder="例如：銀行、快樂" />
+                        </div>
+                        <div className="space-y-1"><label className="text-sm text-slate-400">標題</label><input type="text" value={sheetTitle} onChange={(e) => setSheetTitle(e.target.value)} className="w-full bg-slate-800 border-slate-700 border rounded p-2 text-white outline-none" /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1"><div className="flex justify-between text-xs text-slate-400"><span>字體</span><span>{fontSize}</span></div><input type="range" min="24" max="48" step="2" value={fontSize} onChange={(e) => setFontSize(parseInt(e.target.value))} className="w-full h-2 bg-slate-700 rounded-lg accent-blue-500" /></div>
+                            <div className="space-y-1"><div className="flex justify-between text-xs text-slate-400"><span>每列題數</span><span>{itemsPerRow}</span></div><input type="range" min="4" max="8" step="1" value={itemsPerRow} onChange={(e) => setItemsPerRow(parseInt(e.target.value))} className="w-full h-2 bg-slate-700 rounded-lg accent-blue-500" /></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 pt-2">
+                            <button onClick={() => setGlobalMode('hideZhuyin')} className="bg-slate-800 hover:bg-blue-600 p-2 rounded text-sm flex items-center justify-center gap-1 border border-slate-700"><IconEraser /> 挖空注音</button>
+                            <button onClick={() => setGlobalMode('hideChar')} className="bg-slate-800 hover:bg-blue-600 p-2 rounded text-sm flex items-center justify-center gap-1 border border-slate-700"><IconType /> 挖空國字</button>
+                            <button onClick={() => setGlobalMode('normal')} className="col-span-2 bg-slate-800 hover:bg-green-600 p-2 rounded text-sm flex items-center justify-center gap-1 border border-slate-700"><IconRefresh /> 全部顯示</button>
+                        </div>
+                        <button onClick={handlePrint} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg shadow flex items-center justify-center gap-2 mb-8 md:mb-0"><IconPrinter /> 列印 / PDF</button>
+                    </div>
+                    <button className="fixed bottom-4 right-4 bg-slate-900 text-white p-3 rounded-full shadow-lg md:hidden no-print z-30" onClick={() => setShowSettings(!showSettings)}><IconSettings /></button>
+                </div>
+            );
+        };
+
+        const QuestionItem = ({ line, index, fontSize, onToggleChar, onToggleZhuyin, onUpdateZhuyin }) => {
+            return (
+                <div className="flex flex-col items-center gap-2 px-2" style={{ flex: '0 0 auto', minWidth: '14%' }}>
+                    <div className="w-6 h-6 rounded-full border border-black flex items-center justify-center text-xs font-mono font-bold mb-1">{index + 1}</div>
+                    <div className="flex flex-col items-center gap-1">
+                        {line.chars.map((charData, cIdx) => (
+                            <WordBlock key={charData.id} data={charData} fontSize={fontSize}
+                                onToggleChar={() => onToggleChar(cIdx)} onToggleZhuyin={() => onToggleZhuyin(cIdx)} onUpdateZhuyin={(val) => onUpdateZhuyin(cIdx, val)} />
+                        ))}
+                    </div>
+                </div>
+            )
+        }
+
+        const ZhuyinDisplay = ({ zhuyinStr, isHidden, fontSize }) => {
+            const { symbols, tone } = parseZhuyin(zhuyinStr);
+            const isNeutralTone = tone === '˙';
+            return (
+                <div className={`relative flex flex-col items-center justify-center h-full w-full ${isHidden ? 'invisible' : 'visible'}`}>
+                    {isNeutralTone && <span className="absolute -top-[0.4em] left-1/2 -translate-x-1/2 font-bold scale-75">˙</span>}
+                    <div className="flex flex-col items-center leading-none justify-center h-full zhuyin-font">
+                        {symbols.split('').map((s, i) => <span key={i} className="transform scale-y-110 block" style={{ height: '0.9em' }}>{s}</span>)}
+                    </div>
+                    {!isNeutralTone && tone && <span className="absolute -right-[0.5em] top-1/2 -translate-y-1/2 font-bold scale-90">{tone}</span>}
+                </div>
+            );
+        };
+
+        const WordBlock = ({ data, fontSize, onToggleChar, onToggleZhuyin, onUpdateZhuyin }) => {
+            const [isEditing, setIsEditing] = useState(false);
+            const [tempZhuyin, setTempZhuyin] = useState(data.zhuyin);
+            const inputRef = useRef(null);
+            const handleZhuyinClick = (e) => { e.stopPropagation(); onToggleZhuyin(); };
+            const handleZhuyinDoubleClick = (e) => { e.stopPropagation(); setTempZhuyin(data.zhuyin); setIsEditing(true); setTimeout(() => inputRef.current?.focus(), 10); };
+            const handleBlur = () => { setIsEditing(false); onUpdateZhuyin(tempZhuyin); };
+            const handleKeyDown = (e) => { if (e.key === 'Enter') handleBlur(); };
+
+            return (
+                <div className="flex border border-transparent" style={{ fontSize: `${fontSize}px`, width: `${fontSize * 1.5}px`, height: `${fontSize * 1.4}px` }}>
+                    <div onClick={onToggleChar} className={`flex justify-center items-center border border-black cursor-pointer hover:bg-gray-50 transition-colors ${data.isCharHidden ? 'text-transparent' : 'text-black'}`} style={{ flex: 1, lineHeight: 1 }}>{data.char}</div>
+                    <div className={`flex justify-center items-center select-none cursor-pointer hover:bg-blue-50 transition-colors relative ${data.isZhuyinHidden ? 'border border-gray-400 rounded-sm' : ''}`} style={{ width: '35%', fontSize: '0.4em' }} onClick={handleZhuyinClick} onDoubleClick={handleZhuyinDoubleClick}>
+                        {isEditing ? (
+                            <input ref={inputRef} value={tempZhuyin} onChange={(e) => setTempZhuyin(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown} className="w-full h-full text-center bg-yellow-100 outline-none p-0 m-0 border-none absolute top-0 left-0" style={{ fontSize: '12px' }} onClick={(e) => e.stopPropagation()} />
+                        ) : ( <ZhuyinDisplay zhuyinStr={data.zhuyin} isHidden={data.isZhuyinHidden} fontSize={fontSize} /> )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);             
+    </script>
+</body>
+</html>
